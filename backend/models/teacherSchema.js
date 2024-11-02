@@ -9,6 +9,7 @@ const teacherSchema = new Schema ({
     },
     email: {
         type: String,
+        unique: true,
         required: true
     },
     password: {
@@ -17,6 +18,10 @@ const teacherSchema = new Schema ({
     },
     profilePicture: {
         type: String
+    },
+    teachCourse: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'course',
     }
 }, { timestamps: true })
 
