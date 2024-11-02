@@ -1,97 +1,112 @@
-const Student = require('../models/studentSchema')
-const mongoose = require('mongoose')
+const bcrypt = require('bcrypt');
+const Student = require('../models/studentSchema.js');
 
-
-const getStudents = async (req, res) => {
-    const students = await Student.find({}).sort({createAt: -1})
-
-    res.status(200).json(students)
-}
-
-const getStudent = async (req, res) => {
-    const { id } = req.params
-
-    if(!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(404).json({ error: 'No such Student'})
-    }
-
-    const student = await Student.findById(id)
-
-    if(!student) {
-        return res.staus(404).json({ error: 'No such Student'})
-    }
-
-    res.status(200).json(student)
-}
-
-const createStudent = async (req, res) => {
-    const {name, email, password, profilePicture} = req.body
-
-    let emptyFileds = []
-
-    if (!name) {
-        emptyFileds.push('name')
-    }
-    if (!email) {
-        emptyFileds.push('email')
-    }
-    if (!password) {
-        emptyFileds.push('password')
-    }
-    if (!profilePicture) {
-        emptyFileds.push('profilePicture')
-    }
-    if (emptyFileds.length > 0) {
-        return res.staus(400).json({ error: 'Please fill in all fields', emptyFileds})
-    }
-
+// Register Student
+const studentRegister = async (req, res) => {
     try {
-        const student = await Student.create({ name, email, password, profilePicture })
-        res.staus(200).json(student)
-    } catch (error) {
-        res.status(400).json({ error: error.message })
-    }
-}
+        const salt = await bcrypt.genSalt(10);
+        const hashedPass = await bcrypt.hash(req.body.password, salt);
 
+        const existingStudent = await Student.findOne({ email: req.body.email });
+
+        if (existingStudent) {
+            res.send({ message: 'Email already exists' });
+        } else {
+            const student = new Student({
+                name: req.body.name,
+                email: req.body.email,
+                password: hashedPass,
+                profilePicture: req.body.profilePicture || null
+            });
+
+            let result = await student.save();
+            result.password = undefined;
+            res.send(result);
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Student Login
+const studentLogIn = async (req, res) => {
+    try {
+        let student = await Student.findOne({ email: req.body.email });
+        if (student) {
+            const validated = await bcrypt.compare(req.body.password, student.password);
+            if (validated) {
+                student.password = undefined;
+                res.send(student);
+            } else {
+                res.send({ message: 'Invalid password' });
+            }
+        } else {
+            res.send({ message: 'Student not found' });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Get All Students
+const getStudents = async (req, res) => {
+    try {
+        let students = await Student.find({});
+        let modifiedStudents = students.map(student => {
+            student.password = undefined;
+            return student;
+        });
+        res.send(modifiedStudents);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Get Single Student Details
+const getStudentDetail = async (req, res) => {
+    try {
+        let student = await Student.findById(req.params.id);
+        if (student) {
+            student.password = undefined;
+            res.send(student);
+        } else {
+            res.send({ message: 'Student not found' });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Delete Single Student
 const deleteStudent = async (req, res) => {
-    const { id } = req.params
-
-    if(mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({error: 'No such Student'})
+    try {
+        const result = await Student.findByIdAndDelete(req.params.id);
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
     }
+};
 
-    const student = await Student.findOneAndDelete({_id: id})
-
-    if(!student) {
-        return res.status(400).json({error: 'No such Student'})
-    }
-
-    res.status(200).json(student)
-}
-
+// Update Student
 const updateStudent = async (req, res) => {
-    const { id } = req.params
-
-    if(!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({error: 'No such Student'})
+    try {
+        if (req.body.password) {
+            const salt = await bcrypt.genSalt(10);
+            req.body.password = await bcrypt.hash(req.body.password, salt);
+        }
+        const result = await Student.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true });
+        result.password = undefined;
+        res.send(result);
+    } catch (error) {
+        res.status(500).json(error);
     }
-
-    const student = await Student.findByIdAndUpdate({_id: id}, {
-        ...req.body
-    })
-
-    if(!student) {
-        return res.status(400).json({ error: 'No such Student'})
-    }
-
-    res.status(200).json(student)
-}
+};
 
 module.exports = {
+    studentRegister,
+    studentLogIn,
     getStudents,
-    getStudent,
-    createStudent,
+    getStudentDetail,
+    deleteStudent,
     updateStudent,
-    deleteStudent
-}
-
+};

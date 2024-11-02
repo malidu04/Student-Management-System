@@ -1,128 +1,171 @@
-const Course = require('../models/courseSchema');
-const Teacher = require('../models/teacherSchema');
-const Student = require('../models/studentSchema');
+const Course = require('../models/courseSchema.js');
+const Teacher = require('../models/teacherSchema.js');
+const Student = require('../models/studentSchema.js');
 
-// Controller to get all courses
-const getCourses = async (req, res) => {
-    try {
-        const courses = await Course.find().populate('teacher').populate('students');
-        res.status(200).json(courses);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Controller to get a single course by ID
-const getCourse = async (req, res) => {
-    const { id } = req.params;
-    try {
-        const course = await Course.findById(id).populate('teacher').populate('students');
-        if (!course) {
-            return res.status(404).json({ error: 'Course not found' });
-        }
-        res.status(200).json(course);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Controller to create a new course
+// Create a new course
 const createCourse = async (req, res) => {
-    const { name, description } = req.body;
     try {
-        const newCourse = await Course.create({ name, description });
-        res.status(201).json(newCourse);
-    } catch (error) {
-        res.status(400).json({ error: error.message });
+        const { name, courseID, description, teacher, students } = req.body;
+
+        const existingCourseByCourseID = await Course.findOne({ courseID });
+        if (existingCourseByCourseID) {
+            return res.status(400).json({ message: 'Course ID must be unique; it already exists' });
+        }
+
+        const newCourse = new Course({
+            name,
+            courseID,
+            description,
+            teacher,
+            students,
+        });
+
+        const result = await newCourse.save();
+        res.status(201).json(result);
+    } catch (err) {
+        res.status(500).json(err);
     }
 };
 
-// Controller to assign a teacher to a course
-const assignTeacher = async (req, res) => {
-    const { courseId } = req.params;
-    const { teacherId } = req.body;
-
+// Get all courses for a specific school or admin
+const getAllCourses = async (req, res) => {
     try {
-        const course = await Course.findById(courseId);
-        const teacher = await Teacher.findById(teacherId);
+        const courses = await Course.find({})
+            .populate("teacher", "name")
+            .populate("students", "name");
 
-        if (!course || !teacher) {
-            return res.status(404).json({ error: 'Course or Teacher not found' });
+        if (courses.length > 0) {
+            res.json(courses);
+        } else {
+            res.status(404).json({ message: "No courses found" });
         }
-
-        course.teacher = teacherId;
-        await course.save();
-
-        res.status(200).json(course);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch (err) {
+        res.status(500).json(err);
     }
 };
 
-// Controller to enroll a student in a course
-const enrollStudent = async (req, res) => {
-    const { courseId } = req.params;
-    const { studentId } = req.body;
-
+// Get courses by specific teacher
+const getCoursesByTeacher = async (req, res) => {
     try {
-        const course = await Course.findById(courseId);
-        const student = await Student.findById(studentId);
+        const courses = await Course.find({ teacher: req.params.teacherId })
+            .populate("teacher", "name")
+            .populate("students", "name");
 
-        if (!course || !student) {
-            return res.status(404).json({ error: 'Course or Student not found' });
+        if (courses.length > 0) {
+            res.json(courses);
+        } else {
+            res.status(404).json({ message: "No courses found for this teacher" });
         }
-
-        // Check if the student is already enrolled
-        if (course.students.includes(studentId)) {
-            return res.status(400).json({ error: 'Student already enrolled' });
-        }
-
-        course.students.push(studentId);
-        await course.save();
-
-        res.status(200).json(course);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch (err) {
+        res.status(500).json(err);
     }
 };
 
-// Controller to delete a course by ID
+// Get details of a single course
+const getCourseDetail = async (req, res) => {
+    try {
+        const course = await Course.findById(req.params.id)
+            .populate("teacher", "name")
+            .populate("students", "name");
+
+        if (course) {
+            res.json(course);
+        } else {
+            res.status(404).json({ message: "Course not found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Get all courses without assigned teachers (free courses)
+const getFreeCourses = async (req, res) => {
+    try {
+        const courses = await Course.find({ teacher: { $exists: false } });
+        if (courses.length > 0) {
+            res.json(courses);
+        } else {
+            res.status(404).json({ message: "No free courses found" });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+};
+
+// Delete a single course
 const deleteCourse = async (req, res) => {
-    const { id } = req.params;
-
     try {
-        const course = await Course.findByIdAndDelete(id);
-        if (!course) {
-            return res.status(404).json({ error: 'Course not found' });
+        const deletedCourse = await Course.findByIdAndDelete(req.params.id);
+
+        if (deletedCourse) {
+            await Teacher.updateOne(
+                { teachCourse: deletedCourse._id },
+                { $unset: { teachCourse: "" } }
+            );
+
+            await Student.updateMany(
+                {},
+                { $pull: { courses: deletedCourse._id } }
+            );
+
+            res.json(deletedCourse);
+        } else {
+            res.status(404).json({ message: "Course not found" });
         }
-        res.status(200).json({ message: 'Course deleted successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json(error);
     }
 };
 
-// Controller to update a course by ID
-const updateCourse = async (req, res) => {
-    const { id } = req.params;
-    const { name, description } = req.body;
-
+// Delete all courses by a specific admin or school
+const deleteCoursesByAdmin = async (req, res) => {
     try {
-        const course = await Course.findByIdAndUpdate(id, { name, description }, { new: true });
-        if (!course) {
-            return res.status(404).json({ error: 'Course not found' });
-        }
-        res.status(200).json(course);
+        const deletedCourses = await Course.deleteMany({ adminID: req.params.id });
+
+        await Teacher.updateMany(
+            { teachCourse: { $in: deletedCourses.map(course => course._id) } },
+            { $unset: { teachCourse: "" } }
+        );
+
+        await Student.updateMany(
+            {},
+            { $pull: { courses: { $in: deletedCourses.map(course => course._id) } } }
+        );
+
+        res.json(deletedCourses);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(500).json(error);
+    }
+};
+
+// Delete all courses by specific class
+const deleteCoursesByClass = async (req, res) => {
+    try {
+        const deletedCourses = await Course.deleteMany({ classId: req.params.id });
+
+        await Teacher.updateMany(
+            { teachCourse: { $in: deletedCourses.map(course => course._id) } },
+            { $unset: { teachCourse: "" } }
+        );
+
+        await Student.updateMany(
+            {},
+            { $pull: { courses: { $in: deletedCourses.map(course => course._id) } } }
+        );
+
+        res.json(deletedCourses);
+    } catch (error) {
+        res.status(500).json(error);
     }
 };
 
 module.exports = {
-    getCourses,
-    getCourse,
     createCourse,
-    assignTeacher,
-    enrollStudent,
+    getAllCourses,
+    getCoursesByTeacher,
+    getCourseDetail,
+    getFreeCourses,
     deleteCourse,
-    updateCourse
+    deleteCoursesByAdmin,
+    deleteCoursesByClass,
 };
