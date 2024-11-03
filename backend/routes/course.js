@@ -1,35 +1,19 @@
-const express = require('express');
+const router = require('express').Router();
 const {
-    getCourses,
-    getCourse,
     createCourse,
-    assignTeacher,
-    enrollStudent,
+    getAllCourses,
+    getCoursesByTeacher,
+    getCourseDetail,
+    getFreeCourses,
     deleteCourse,
-    updateCourse
 } = require('../controllers/courseController');
 
-const router = express.Router();
-
-// Route to get all courses
-router.get('/', getCourses);
-
-// Route to get a single course by ID
-router.get('/:id', getCourse);
-
-// Route to create a new course
-router.post('/', createCourse);
-
-// Route to assign a teacher to a course
-router.post('/:courseId/assign-teacher', assignTeacher);
-
-// Route to enroll a student in a course
-router.post('/:courseId/enroll-student', enrollStudent);
-
-// Route to delete a course by ID
-router.delete('/:id', deleteCourse);
-
-// Route to update a course by ID
-router.put('/:id', updateCourse);
+// Course Routes
+router.post('/CourseCreate', createCourse);                 // Create a new course
+router.get('/Courses', getAllCourses);                     // Get all courses
+router.get('/Courses/Teacher/:teacherId', getCoursesByTeacher); // Get courses by specific teacher
+router.get('/Course/:id', getCourseDetail);                // Get details of a single course
+router.get('/FreeCourses', getFreeCourses);                // Get all courses without assigned teachers (free courses)
+router.delete('/Course/:id', deleteCourse);                // Delete a single course
 
 module.exports = router;

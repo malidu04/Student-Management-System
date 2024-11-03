@@ -117,47 +117,6 @@ const deleteCourse = async (req, res) => {
     }
 };
 
-// Delete all courses by a specific admin or school
-const deleteCoursesByAdmin = async (req, res) => {
-    try {
-        const deletedCourses = await Course.deleteMany({ adminID: req.params.id });
-
-        await Teacher.updateMany(
-            { teachCourse: { $in: deletedCourses.map(course => course._id) } },
-            { $unset: { teachCourse: "" } }
-        );
-
-        await Student.updateMany(
-            {},
-            { $pull: { courses: { $in: deletedCourses.map(course => course._id) } } }
-        );
-
-        res.json(deletedCourses);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
-
-// Delete all courses by specific class
-const deleteCoursesByClass = async (req, res) => {
-    try {
-        const deletedCourses = await Course.deleteMany({ classId: req.params.id });
-
-        await Teacher.updateMany(
-            { teachCourse: { $in: deletedCourses.map(course => course._id) } },
-            { $unset: { teachCourse: "" } }
-        );
-
-        await Student.updateMany(
-            {},
-            { $pull: { courses: { $in: deletedCourses.map(course => course._id) } } }
-        );
-
-        res.json(deletedCourses);
-    } catch (error) {
-        res.status(500).json(error);
-    }
-};
 
 module.exports = {
     createCourse,
@@ -166,6 +125,4 @@ module.exports = {
     getCourseDetail,
     getFreeCourses,
     deleteCourse,
-    deleteCoursesByAdmin,
-    deleteCoursesByClass,
 };
